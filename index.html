@@ -1398,6 +1398,11 @@ body{
 .searchClear{
   touch-action:manipulation;
 }
+input,
+select,
+textarea{
+  font-size:max(16px,1em);
+}
 @supports (padding: max(0px)){
   .wrap{
     padding-left:max(13px, env(safe-area-inset-left, 0px));
@@ -1555,27 +1560,29 @@ html:not(.auth-unlocked) .bottom{
         i.closest('.steak-card').querySelector('.steakPrice').textContent=`${fmt.format(Math.round(grams*steakRate))} Kč`;
       }));
     }
+    const recipeSearchCache=new WeakMap();
     function recipeSales(r){return Number(r.sales || salesByRecipe[r.name] || 0);}
     function aliasText(r){return [r.name].concat(searchAliases[r.name]||[]).join(' ');}
-    function startsByWord(text,q){return norm(text).split(' ').some(w=>w.startsWith(q));}
+    function recipeSearchData(r){let cached=recipeSearchCache.get(r);if(cached)return cached;const aliases=norm(aliasText(r));cached={name:norm(r.name),aliases,aliasWords:aliases.split(' '),ingredients:norm((r.ingredients||[]).map(x=>x.name).join(' ')),other:norm([r.method,r.glass,r.garnish,r.story,r.category].join(' '))};recipeSearchCache.set(r,cached);return cached;}
     function score(r,q){
       if(!q){return recipeSales(r)>0 ? 0 : 3;}
-      const name=norm(r.name);
-      const aliases=norm(aliasText(r));
+      const data=recipeSearchData(r);
       const q3=q.slice(0,3);
-      if(name.startsWith(q) || aliases.split(' ').some(w=>w.startsWith(q))) return 0;
-      if(q.length>=3 && (name.startsWith(q3) || aliases.split(' ').some(w=>w.startsWith(q3)))) return 1;
-      if(name.includes(q) || aliases.includes(q)) return 2;
-      const ing=norm((r.ingredients||[]).map(x=>x.name).join(' '));
-      if(ing.includes(q)) return 3;
-      const other=norm([r.method,r.glass,r.garnish,r.story,r.category].join(' '));
-      if(other.includes(q)) return 4;
+      if(data.name.startsWith(q) || data.aliasWords.some(w=>w.startsWith(q))) return 0;
+      if(q.length>=3 && (data.name.startsWith(q3) || data.aliasWords.some(w=>w.startsWith(q3)))) return 1;
+      if(data.name.includes(q) || data.aliases.includes(q)) return 2;
+      if(data.ingredients.includes(q)) return 3;
+      if(data.other.includes(q)) return 4;
       return 99;
     }
 
     const nonAlcoholicSignatures = new Set(['bohyna','bohemian garden','passion grove','almost negroni','bloom berry']);
-    function signatureSales(r){const table={'king rama':726,'tank olga':606,'prima ballerina':569,"stumblin' in":563,'midnight jam':526,'canta la vita':433,'alcron':423,'thirsty dog':349,'night cap':319,'unexpected':303,'café banana':275,'cafe banana':275,'negroni tropico':251,'n/a bloom berry':272,'black mark':39,'bohyna':0,'passion grove':0,'bohemian garden':196,'almost negroni':0,'strawberry leaf':0,'oaxaca colada':0};return table[norm(r.name)]||0;}
-    function sigScore(r,q){const n=norm(r.name);const key=norm((r.key||[]).join(' '));const taste=norm((r.taste||[]).join(' '));const story=norm(r.story||'');const alias={"stumbling":"stumblin' in","stumblin":"stumblin' in",'rama':'king rama','tank':'tank olga','olga':'tank olga','ballerina':'prima ballerina','balerina':'prima ballerina','nightcap':'night cap','cafe':'café banana','banana':'café banana','bloom':'bloom berry','boh':'bohyna bohemian garden','negr':'negroni tropico almost negroni','non alcoholic':'bohyna bohemian garden passion grove almost negroni bloom berry','nealko':'bohyna bohemian garden passion grove almost negroni bloom berry'};let extra='';Object.entries(alias).forEach(([a,v])=>{const target=norm(v);if((a.includes(q)||q.includes(a))&&target.includes(n)) extra+=' '+target;}); if(!q){return nonAlcoholicSignatures.has(n)?10:0;} if(n.startsWith(q)) return 0; if(q.length>=3 && n.startsWith(q.slice(0,3))) return 1; if(n.includes(q)) return 2; if((key+' '+taste+' '+story+' '+extra).includes(q)) return 3; return 99;}
+    const signatureSalesTable={'king rama':726,'tank olga':606,'prima ballerina':569,"stumblin' in":563,'midnight jam':526,'canta la vita':433,'alcron':423,'thirsty dog':349,'night cap':319,'unexpected':303,'café banana':275,'cafe banana':275,'negroni tropico':251,'n/a bloom berry':272,'black mark':39,'bohyna':0,'passion grove':0,'bohemian garden':196,'almost negroni':0,'strawberry leaf':0,'oaxaca colada':0};
+    const signatureAliasEntries=Object.entries({"stumbling":"stumblin' in","stumblin":"stumblin' in",'rama':'king rama','tank':'tank olga','olga':'tank olga','ballerina':'prima ballerina','balerina':'prima ballerina','nightcap':'night cap','cafe':'café banana','banana':'café banana','bloom':'bloom berry','boh':'bohyna bohemian garden','negr':'negroni tropico almost negroni','non alcoholic':'bohyna bohemian garden passion grove almost negroni bloom berry','nealko':'bohyna bohemian garden passion grove almost negroni bloom berry'}).map(([alias,target])=>[norm(alias),norm(target)]);
+    const signatureSearchCache=new WeakMap();
+    function signatureSearchData(r){let cached=signatureSearchCache.get(r);if(cached)return cached;cached={name:norm(r.name),key:norm((r.key||[]).join(' ')),taste:norm((r.taste||[]).join(' ')),story:norm(r.story||'')};signatureSearchCache.set(r,cached);return cached;}
+    function signatureSales(r){return signatureSalesTable[signatureSearchData(r).name]||0;}
+    function sigScore(r,q){const data=signatureSearchData(r);let extra='';for(const [alias,target] of signatureAliasEntries){if((alias.includes(q)||q.includes(alias))&&target.includes(data.name)) extra+=' '+target;} if(!q){return nonAlcoholicSignatures.has(data.name)?10:0;} if(data.name.startsWith(q)) return 0; if(q.length>=3 && data.name.startsWith(q.slice(0,3))) return 1; if(data.name.includes(q)) return 2; if((data.key+' '+data.taste+' '+data.story+' '+extra).includes(q)) return 3; return 99;}
     function glassIceValue(meta){
       const glass = (meta && meta.Glassware) ? String(meta.Glassware).trim() : '';
       const iceRaw = (meta && meta.Ice) ? String(meta.Ice).trim() : '';
@@ -1607,22 +1614,29 @@ html:not(.auth-unlocked) .bottom{
     function spiritText(r){const cached=spiritSearchCache.get(r);if(cached)return cached;const text=norm(r.search||[r.name,r.category,(r.facts||[]).map(x=>`${x.label} ${x.value}`).join(' '),r.description,r.inside,r.insideInfo].join(' '));spiritSearchCache.set(r,text);return text;}
     function renderSpiritList(){const q=norm(byId('spiritSearch').value);const filtering=q.length>=3;let hasItems=false;const html=spiritProductsByCategory.map(group=>{const items=filtering?group.items.filter(r=>spiritText(r).includes(q)):group.items;if(!items.length)return '';hasItems=true;return `<section class="spiritCategory"><h2 class="spiritCategoryTitle">${esc(group.category)}</h2><div class="spiritCategoryCards">${items.map(renderSpiritProduct).join('')}</div></section>`;}).join('');byId('spiritList').innerHTML=hasItems?html:'<div class="empty">No product found.</div>';}
     function renderCocktails(){const q=norm(byId('cocktailSearch').value);let list=recipes.map(r=>Object.assign({},r,{_score:score(r,q)})).filter(r=>r._score<99||!q);list.sort((a,b)=>a._score-b._score||recipeSales(b)-recipeSales(a)||a.name.localeCompare(b.name));byId('cocktailList').innerHTML=list.length?list.map(r=>`<article class="cocktail"><div class="cocktailTop"><div class="cocktailTitleBlock"><h2>${esc(r.name)}</h2><div class="signatureAllergens">Allergens: ${esc(r.allergens||'N/A')}</div></div><span class="tag ${esc(r.category)}">${esc(r.category)}</span></div>${r.story?`<p class="story">${esc(r.story)}</p>`:''}<div class="ingrid">${(r.ingredients||[]).map(x=>`<div class="ingrow"><span class="iname">${esc(x.name)}</span><span class="iamt">${esc(x.amount||'')}</span></div>`).join('')}</div><div class="meta"><div class="metaRow"><span class="metaLabel">Method</span><span class="metaValue">${esc(r.method||'Not specified')}</span></div><div class="metaRow"><span class="metaLabel">Glass & Ice</span><span class="metaValue">${esc(r.glass||'Not specified')}</span></div><div class="metaRow"><span class="metaLabel">Garnish</span><span class="metaValue">${esc(r.garnish||'Not specified')}</span></div></div></article>`).join(''):'<div class="empty">No cocktail found.</div>';}
-    let cocktailRenderFrame=0;
-    let signatureRenderFrame=0;
-    let spiritRenderFrame=0;
-    function scheduleCocktailRender(){if(cocktailRenderFrame)cancelAnimationFrame(cocktailRenderFrame);cocktailRenderFrame=requestAnimationFrame(()=>{cocktailRenderFrame=0;renderCocktails();});}
-    function scheduleSignatureRender(){if(signatureRenderFrame)cancelAnimationFrame(signatureRenderFrame);signatureRenderFrame=requestAnimationFrame(()=>{signatureRenderFrame=0;renderSignature();});}
-    function scheduleSpiritRender(){if(spiritRenderFrame)cancelAnimationFrame(spiritRenderFrame);spiritRenderFrame=requestAnimationFrame(()=>{spiritRenderFrame=0;renderSpiritList();});}
+    const searchRenderTimers={cocktail:0,signature:0,spirit:0};
+    const searchRenderFrames={cocktail:0,signature:0,spirit:0};
+    const SEARCH_DEBOUNCE_MS=70;
+    function cancelSearchRender(key){if(searchRenderTimers[key]){clearTimeout(searchRenderTimers[key]);searchRenderTimers[key]=0;}if(searchRenderFrames[key]){cancelAnimationFrame(searchRenderFrames[key]);searchRenderFrames[key]=0;}}
+    function scheduleSearchRender(key,renderFn){cancelSearchRender(key);searchRenderTimers[key]=setTimeout(()=>{searchRenderTimers[key]=0;searchRenderFrames[key]=requestAnimationFrame(()=>{searchRenderFrames[key]=0;renderFn();});},SEARCH_DEBOUNCE_MS);}
+    function flushSearchRender(key,renderFn){cancelSearchRender(key);renderFn();}
+    function scheduleCocktailRender(){scheduleSearchRender('cocktail',renderCocktails);}
+    function scheduleSignatureRender(){scheduleSearchRender('signature',renderSignature);}
+    function scheduleSpiritRender(){scheduleSearchRender('spirit',renderSpiritList);}
     function updateBottom(){const active=document.querySelector('.tab.active').dataset.screen;const bottom=byId('bottomBar');bottom.classList.remove('steakOnly');if(active==='classics'||active==='signature'||active==='spirit'){bottom.classList.add('hidden');return;}bottom.classList.remove('hidden');if(active==='cash'){const total=[...document.querySelectorAll('.cashInput')].reduce((sum,i)=>sum+Number(i.value||0)*Number(i.dataset.value),0);byId('bottomLabel').textContent='Total to change';byId('bottomValue').textContent=`${fmt.format(total)} Kč`;}else{bottom.classList.add('steakOnly');}}
     const searchInputIds=['signatureSearch','cocktailSearch','spiritSearch'];
-    function resetSearchInput(id){const input=byId(id);if(!input||!input.value)return;input.value='';if(id==='signatureSearch')renderSignature();if(id==='cocktailSearch')renderCocktails();if(id==='spiritSearch')renderSpiritList();}
+    const renderedScreens=new Set(['signature']);
+    function renderScreen(screen){if(screen==='signature')flushSearchRender('signature',renderSignature);if(screen==='classics')flushSearchRender('cocktail',renderCocktails);if(screen==='spirit')flushSearchRender('spirit',renderSpiritList);}
+    function ensureScreenRendered(screen){if(renderedScreens.has(screen))return;renderScreen(screen);renderedScreens.add(screen);}
+    function renderSearchInput(id){if(id==='signatureSearch')flushSearchRender('signature',renderSignature);if(id==='cocktailSearch')flushSearchRender('cocktail',renderCocktails);if(id==='spiritSearch')flushSearchRender('spirit',renderSpiritList);}
+    function resetSearchInput(id){const input=byId(id);if(!input||!input.value)return;input.value='';renderSearchInput(id);}
     function resetAllSearchInputs(){searchInputIds.forEach(resetSearchInput);}
-    document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{const next=btn.dataset.screen;resetAllSearchInputs();document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));byId(next).classList.add('active');document.body.classList.toggle('classics-mode', next==='classics'||next==='signature');updateBottom();}));
+    document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{const next=btn.dataset.screen;resetAllSearchInputs();ensureScreenRendered(next);document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));byId(next).classList.add('active');document.body.classList.toggle('classics-mode', next==='classics'||next==='signature');updateBottom();}));
     byId('clearBtn').addEventListener('click',()=>{const active=document.querySelector('.tab.active').dataset.screen;if(active==='cash')document.querySelectorAll('.cashInput').forEach(i=>i.value='');if(active==='steak'){document.querySelectorAll('.steakInput').forEach(i=>i.value='');document.querySelectorAll('.steakPrice').forEach(p=>p.textContent='0 Kč');}updateBottom();});
 
-    byId('cocktailSearch').addEventListener('input',scheduleCocktailRender);byId('spiritSearch').addEventListener('input',scheduleSpiritRender);renderCash();renderSteak();renderCocktails();renderSpiritList();renderSignature();byId('signatureSearch').addEventListener('input',scheduleSignatureRender);updateBottom();
+    byId('cocktailSearch').addEventListener('input',scheduleCocktailRender);byId('spiritSearch').addEventListener('input',scheduleSpiritRender);renderCash();renderSteak();renderSignature();byId('signatureSearch').addEventListener('input',scheduleSignatureRender);updateBottom();
   
-    document.querySelectorAll('.searchClear').forEach(btn=>btn.addEventListener('click',()=>{const input=byId(btn.dataset.target); if(!input) return; input.value=''; input.dispatchEvent(new Event('input')); window.scrollTo({top:0,behavior:'smooth'}); setTimeout(()=>input.focus({preventScroll:true}),260);}));
+    document.querySelectorAll('.searchClear').forEach(btn=>btn.addEventListener('click',()=>{const input=byId(btn.dataset.target); if(!input) return; if(input.value){input.value='';renderSearchInput(input.id);} window.scrollTo({top:0,behavior:'smooth'}); requestAnimationFrame(()=>input.focus({preventScroll:true}));}));
     document.addEventListener('click',event=>{if(event.target.closest('.search'))return;resetAllSearchInputs();},true);
 
     const authForm=byId('authForm');
@@ -1650,7 +1664,7 @@ html:not(.auth-unlocked) .bottom{
     }
 
     if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1')){
-      window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).catch(()=>{}),{once:true});
+      window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).then(registration=>registration.update()).catch(()=>{}),{once:true});
     }
 </script>
 </body>
